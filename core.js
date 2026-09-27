@@ -77,6 +77,13 @@
     }
     return next;
   }
-  const api = { connectionError, validate, demo: () => validate(demo()), deletionPlan, removeItem, nodePorts, recipeQuantities, validQuantity };
+  function moveNodes(state, starts, dx, dy) {
+    const origins = new Map(starts.map(n => [n.id,n]));
+    for (const node of state.nodes) {
+      const origin = origins.get(node.id);
+      if (origin) { node.x = origin.x + dx; node.y = origin.y + dy; }
+    }
+  }
+  const api = { connectionError, validate, demo: () => validate(demo()), deletionPlan, removeItem, nodePorts, recipeQuantities, validQuantity, moveNodes };
   if (typeof module !== 'undefined') module.exports = api; else root.CraftCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -2,6 +2,19 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validate, demo, connectionError, deletionPlan, removeItem } = require('./core.js');
 const { nodePorts } = require('./core.js');
+test('moving a group preserves offsets, unselected nodes and connections', () => {
+  const {moveNodes}=require('./core.js');
+  const data=demo(), original=structuredClone(data);
+  const starts=data.nodes.slice(0,2).map(n=>({...n}));
+  moveNodes(data,starts,120/.5,-40/.5);
+  for(let i=0;i<2;i++){assert.equal(data.nodes[i].x,original.nodes[i].x+240);assert.equal(data.nodes[i].y,original.nodes[i].y-80);}
+  assert.deepEqual(data.nodes.slice(2),original.nodes.slice(2));
+  assert.deepEqual(data.edges,original.edges);
+  moveNodes(data,starts,10,20);
+  assert.equal(data.nodes[0].x,original.nodes[0].x+10);
+  assert.equal(data.nodes[1].y-data.nodes[0].y,original.nodes[1].y-original.nodes[0].y);
+  assert.deepEqual(validate(JSON.parse(JSON.stringify(data))),data);
+});
 test('reversed inputs survive JSON without changing recipes or edge endpoints', () => {
   const data=demo();
   const original=structuredClone(data);

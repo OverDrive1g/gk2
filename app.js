@@ -10,6 +10,8 @@ function save() { try { localStorage.setItem(storageKey, JSON.stringify(state));
 const material = id => state.materials.find(m => m.id === id);
 const recipe = id => state.recipes.find(r => r.id === id);
 function icon(m, small = false) { return `<span class="item-icon${small ? ' small' : ''}">${m.icon.startsWith('data:image/') ? `<img src="${esc(m.icon)}" alt="">` : esc(m.icon || '◇')}</span>`; }
+function selectedNodeIds() { return selected?.type === 'nodes' ? selected.ids : selected?.type === 'node' ? [selected.id] : []; }
+function updateSelection() { const ids=new Set(selectedNodeIds());document.querySelectorAll('.node').forEach(n=>n.classList.toggle('selected',ids.has(n.dataset.node)));drawWires(); }
 function renderCatalog() {
   const query = $('#search').value.trim().toLocaleLowerCase('ru');
   $('#recipe-count').textContent = state.recipes.length; $('#material-count').textContent = state.materials.length;
@@ -17,16 +19,15 @@ function renderCatalog() {
   $('#materials').innerHTML = state.materials.filter(m => m.name.toLocaleLowerCase('ru').includes(query)).map(m => `<button class="material-row" data-material="${esc(m.id)}" title="Изменить: ${esc(m.name)}">${icon(m,true)}<span>${esc(m.name)}</span></button>`).join('') || '<div class="no-results">Материалов пока нет</div>';
 }
 function renderNodes() {
+  const selectedIds=new Set(selectedNodeIds());
   $('#nodes').innerHTML = state.nodes.map(n => {
     const ports = CraftCore.nodePorts(state,n), splitter = n.type === 'splitter', producer = n.type === 'producer', terminator = n.type === 'terminator';
     const m = terminator ? {name:'Любой материал',icon:'◎'} : material(ports.outputs[0]);
     const quantities = splitter || producer || terminator ? null : CraftCore.recipeQuantities(recipe(n.recipe));
     function rows(ids,kind) {
-      const indices = ids.map((_,i) => i);
-      if(kind==='in' && n.inputsReversed)indices.reverse();
+      const indices=ids.map((_,i)=>i);if(kind==='in'&&n.inputsReversed)indices.reverse();
       return indices.map(i => {
-        const id=ids[i];
-        const item = id === null ? {name:'Любой материал',icon:'◎'} : material(id);
+        const id=ids[i], item = id === null ? {name:'Любой материал',icon:'◎'} : material(id);
         const label = (kind==='out'?'Выход':'Вход')+' '+(i+1)+': '+item.name;
         const suffix = quantities ? ' <span class="quantity">×'+(kind==='out'?quantities.outputQuantity:quantities.inputQuantities[i])+'</span>' : splitter && kind==='out' ? ' · '+(i+1) : '';
         return '<div class="port-row'+(kind==='out'?' output':'')+'"><button class="port'+(kind==='out'?' out':'')+'" data-node="'+esc(n.id)+'" data-kind="'+kind+'" data-input="'+i+'" title="'+esc(label)+'" aria-label="'+esc(label)+'"></button>'+icon(item,true)+'<span>'+esc(item.name)+suffix+'</span></div>';
@@ -35,18 +36,17 @@ function renderNodes() {
     const title = splitter ? 'Сплиттер 1 → '+n.outputs : producer ? 'Продьюсер' : terminator ? 'Терминатор' : m.name;
     const subtitle = splitter ? 'РАЗВЕТВЛЕНИЕ МАТЕРИАЛА' : producer ? 'ИСТОЧНИК МАТЕРИАЛА' : terminator ? 'УНИВЕРСАЛЬНЫЙ ПРИЁМНИК' : 'РЕЦЕПТ КРАФТА';
     const swap = ports.inputs.length > 1 ? '<button type="button" class="swap-inputs" data-swap-inputs="'+esc(n.id)+'" title="Поменять входы местами" aria-label="Поменять входы местами">⇅</button>' : '';
-    return '<article class="node'+(selected?.id===n.id?' selected':'')+'" data-node="'+esc(n.id)+'" style="left:'+n.x+'px;top:'+n.y+'px"><div class="node-header">'+icon(m)+'<div><div class="node-title">'+esc(title)+'</div><div class="node-subtitle">'+subtitle+'</div></div>'+swap+'</div><div class="node-body">'+rows(ports.inputs,'in')+rows(ports.outputs,'out')+'</div></article>';
+    return '<article class="node'+(selectedIds.has(n.id)?' selected':'')+'" data-node="'+esc(n.id)+'" style="left:'+n.x+'px;top:'+n.y+'px"><div class="node-header">'+icon(m)+'<div><div class="node-title">'+esc(title)+'</div><div class="node-subtitle">'+subtitle+'</div></div>'+swap+'</div><div class="node-body">'+rows(ports.inputs,'in')+rows(ports.outputs,'out')+'</div></article>';
   }).join('');
-  $('#graph-count').textContent = `${state.nodes.length} нод · ${state.edges.length} связей`; $('#empty').hidden = state.nodes.length > 0;
-  drawWires();
+  $('#graph-count').textContent = `${state.nodes.length} нод · ${state.edges.length} связей`; $('#empty').hidden = state.nodes.length > 0;drawWires();
 }
 function render() { renderCatalog(); renderNodes(); }
 function worldPoint(clientX, clientY) { const rect = $('#canvas').getBoundingClientRect(); return {x:(clientX-rect.left-view.x)/view.scale,y:(clientY-rect.top-view.y)/view.scale}; }
 function portPoint(id, kind, input = 0) { const el = [...document.querySelectorAll('.port')].find(p => p.dataset.node === id && p.dataset.kind === kind && +p.dataset.input === input); if (!el) return {x:0,y:0}; const b = el.getBoundingClientRect(); return worldPoint(b.left+b.width/2,b.top+b.height/2); }
 function curve(a,b) { const d = Math.max(65,Math.abs(b.x-a.x)*.45); return `M ${a.x} ${a.y} C ${a.x+d} ${a.y}, ${b.x-d} ${b.y}, ${b.x} ${b.y}`; }
-function drawWires(preview) { $('#wires').innerHTML = state.edges.map(e => `<path class="wire${selected?.id === e.id ? ' selected' : ''}" data-edge="${esc(e.id)}" d="${curve(portPoint(e.from,'out',e.output ?? 0),portPoint(e.to,'in',e.input))}"/>`).join(''); if (pending && preview) { const a = portPoint(pending.node,pending.kind,pending.input); $('#wires').innerHTML += `<path class="wire preview" d="${pending.kind === 'out' ? curve(a,preview) : curve(preview,a)}"/>`; } }
+function drawWires(preview) { $('#wires').innerHTML = state.edges.map(e => `<path class="wire${selected?.type==='edge' && selected.id === e.id ? ' selected' : ''}" data-edge="${esc(e.id)}" d="${curve(portPoint(e.from,'out',e.output ?? 0),portPoint(e.to,'in',e.input))}"/>`).join(''); if (pending && preview) { const a = portPoint(pending.node,pending.kind,pending.input); $('#wires').innerHTML += `<path class="wire preview" d="${pending.kind === 'out' ? curve(a,preview) : curve(preview,a)}"/>`; } }
 function applyView() { $('#world').style.transform = `translate(${view.x}px,${view.y}px) scale(${view.scale})`; $('#zoom-value').textContent = Math.round(view.scale*100)+'%'; $('#canvas').style.backgroundSize = `${22*view.scale}px ${22*view.scale}px`; $('#canvas').style.backgroundPosition = `${view.x}px ${view.y}px`; }
-function zoom(factor, cx, cy) { const rect = $('#canvas').getBoundingClientRect(); cx ??= rect.left+rect.width/2; cy ??= rect.top+rect.height/2; const p = worldPoint(cx,cy); view.scale = Math.max(.25,Math.min(2,view.scale*factor)); view.x = cx-rect.left-p.x*view.scale; view.y = cy-rect.top-p.y*view.scale; applyView(); }
+function zoom(factor, cx, cy) { if(gesture)return;const rect = $('#canvas').getBoundingClientRect(); cx ??= rect.left+rect.width/2; cy ??= rect.top+rect.height/2; const p = worldPoint(cx,cy); view.scale = Math.max(.25,Math.min(2,view.scale*factor)); view.x = cx-rect.left-p.x*view.scale; view.y = cy-rect.top-p.y*view.scale; applyView(); }
 function fit() { if (!state.nodes.length) {view={x:0,y:0,scale:1};applyView();return;} const minX=Math.min(...state.nodes.map(n=>n.x)), minY=Math.min(...state.nodes.map(n=>n.y)), maxX=Math.max(...state.nodes.map(n=>n.x+236)), maxY=Math.max(...state.nodes.map(n=>n.y+(n.type==='splitter' && n.outputs===3 ? 300 : 245))); const b=$('#canvas').getBoundingClientRect();view.scale=Math.max(.25,Math.min(1,(b.width-90)/(maxX-minX),(b.height-115)/(maxY-minY)));view.x=(b.width-(maxX-minX)*view.scale)/2-minX*view.scale;view.y=(b.height-(maxY-minY)*view.scale)/2-minY*view.scale;applyView();drawWires(); }
 function addNode(id,p) { if(!recipe(id))return; const n={id:uid(),recipe:id,x:p.x,y:p.y};state.nodes.push(n);selected={type:'node',id:n.id};renderNodes();save(); }
 $('#search').addEventListener('input',renderCatalog);
@@ -55,26 +55,50 @@ $('#recipes').addEventListener('keydown',e=>{if(e.key==='Enter' && e.target.matc
 $('#recipes').addEventListener('click',e=>{const edit=e.target.closest('[data-edit-recipe]');if(edit)openRecipe(edit.dataset.editRecipe);});
 $('#materials').addEventListener('click',e=>{const row=e.target.closest('[data-material]');if(row)openMaterial(row.dataset.material);});
 const canvas=$('#canvas');
-canvas.addEventListener('click',e=>{
-  const button=e.target.closest('[data-swap-inputs]');
-  if(!button)return;
-  const node=state.nodes.find(n=>n.id===button.dataset.swapInputs);
-  if(!node || CraftCore.nodePorts(state,node).inputs.length<2)return;
-  node.inputsReversed=!node.inputsReversed;
-  selected={type:'node',id:node.id};clearPending();renderNodes();save();
-});
+canvas.addEventListener('click',e=>{const button=e.target.closest('[data-swap-inputs]');if(!button)return;const node=state.nodes.find(n=>n.id===button.dataset.swapInputs);if(!node||CraftCore.nodePorts(state,node).inputs.length<2)return;node.inputsReversed=!node.inputsReversed;selected={type:'node',id:node.id};clearPending();renderNodes();save();});
 canvas.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';canvas.classList.add('dragover');});
 canvas.addEventListener('dragleave',()=>canvas.classList.remove('dragover'));
 canvas.addEventListener('drop',e=>{e.preventDefault();canvas.classList.remove('dragover');const p=worldPoint(e.clientX,e.clientY);addNode(e.dataTransfer.getData('text/plain'),{x:p.x-118,y:p.y-35});});
 function clearPending(){pending=null;document.querySelectorAll('.port.pending').forEach(p=>p.classList.remove('pending'));drawWires();}
 function connectPort(port){const target={node:port.dataset.node,kind:port.dataset.kind,input:+port.dataset.input};if(!pending){pending=target;port.classList.add('pending');toast('Выберите совместимый коннектор: тот же материал или вход терминатора.');return;}if(pending.node===target.node&&pending.kind===target.kind){clearPending();return;}if(pending.kind===target.kind){toast('Соедините выход с входом.');return;}const from=pending.kind==='out'?pending:target,to=pending.kind==='in'?pending:target;const error=CraftCore.connectionError(state,from.node,to.node,to.input,from.input);if(error){toast(error);return;}state.edges.push({id:uid(),from:from.node,to:to.node,input:to.input,output:from.input});clearPending();renderNodes();save();}
-canvas.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('.zoom-controls, [data-swap-inputs]'))return;canvas.focus();const port=e.target.closest('.port');if(port){e.preventDefault();connectPort(port);return;}const edge=e.target.closest('[data-edge]');if(edge){selected={type:'edge',id:edge.dataset.edge};renderNodes();return;}const node=e.target.closest('.node');selected=node?{type:'node',id:node.dataset.node}:null;document.querySelectorAll('.node').forEach(n=>n.classList.toggle('selected',n.dataset.node===selected?.id));drawWires();if(node&&!e.target.closest('.node-header'))return;const n=node?state.nodes.find(n=>n.id===node.dataset.node):null;gesture={type:n?'node':'pan',node:n,startX:e.clientX,startY:e.clientY,x:n?n.x:view.x,y:n?n.y:view.y};canvas.setPointerCapture(e.pointerId);});
-canvas.addEventListener('pointermove',e=>{if(gesture){const dx=e.clientX-gesture.startX,dy=e.clientY-gesture.startY;if(gesture.type==='node'){gesture.node.x=gesture.x+dx/view.scale;gesture.node.y=gesture.y+dy/view.scale;const el=[...document.querySelectorAll('.node')].find(n=>n.dataset.node===gesture.node.id);el.style.left=gesture.node.x+'px';el.style.top=gesture.node.y+'px';drawWires();}else{view.x=gesture.x+dx;view.y=gesture.y+dy;applyView();}}else if(pending)drawWires(worldPoint(e.clientX,e.clientY));});
-function endGesture(){if(gesture?.type==='node')save();gesture=null;}
-canvas.addEventListener('pointerup',endGesture);canvas.addEventListener('pointercancel',endGesture);
+canvas.addEventListener('pointerdown',e=>{
+  if(e.button!==0||gesture||e.target.closest('.zoom-controls, [data-swap-inputs]'))return;
+  canvas.focus();const port=e.target.closest('.port');if(port){e.preventDefault();connectPort(port);return;}
+  const edge=e.target.closest('[data-edge]');if(edge){selected={type:'edge',id:edge.dataset.edge};updateSelection();return;}
+  const element=e.target.closest('.node');
+  if(element){
+    const id=element.dataset.node,ids=new Set(selectedNodeIds());
+    if(e.shiftKey){if(ids.has(id))ids.delete(id);else ids.add(id);selected=ids.size?{type:'nodes',ids:[...ids]}:null;updateSelection();return;}
+    if(!ids.has(id))selected={type:'node',id};updateSelection();
+    if(!e.target.closest('.node-header'))return;
+    const selectedIds=new Set(selectedNodeIds());
+    gesture={type:'nodes',starts:state.nodes.filter(n=>selectedIds.has(n.id)).map(n=>({id:n.id,x:n.x,y:n.y})),startX:e.clientX,startY:e.clientY,scale:view.scale};
+  }else{selected=null;updateSelection();gesture={type:'pan',startX:e.clientX,startY:e.clientY,x:view.x,y:view.y};}
+  e.preventDefault();canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove',e=>{
+  if(gesture){const dx=e.clientX-gesture.startX,dy=e.clientY-gesture.startY;
+    if(gesture.type==='nodes'){
+      CraftCore.moveNodes(state,gesture.starts,dx/gesture.scale,dy/gesture.scale);
+      const positions=new Map(state.nodes.map(n=>[n.id,n]));
+      for(const el of document.querySelectorAll('.node')){const n=positions.get(el.dataset.node);el.style.left=n.x+'px';el.style.top=n.y+'px';}drawWires();
+    }else{view.x=gesture.x+dx;view.y=gesture.y+dy;applyView();}
+  }else if(pending)drawWires(worldPoint(e.clientX,e.clientY));
+});
+function endGesture(){if(gesture?.type==='nodes')save();gesture=null;}
+canvas.addEventListener('pointerup',endGesture);canvas.addEventListener('pointercancel',endGesture);canvas.addEventListener('lostpointercapture',endGesture);
 canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.1:1/1.1,e.clientX,e.clientY);},{passive:false});
-$('#zoom-in').onclick=()=>zoom(1.2);$('#zoom-out').onclick=()=>zoom(1/1.2);$('#fit').onclick=fit;
-document.addEventListener('keydown',e=>{if($('#modal').open||e.target.matches('input,select,textarea'))return;if(e.key==='Escape')clearPending();if((e.key==='Delete'||e.key==='Backspace')&&selected){e.preventDefault();if(selected.type==='node'){state.nodes=state.nodes.filter(n=>n.id!==selected.id);state.edges=state.edges.filter(x=>x.from!==selected.id&&x.to!==selected.id);}else state.edges=state.edges.filter(x=>x.id!==selected.id);selected=null;clearPending();renderNodes();save();}});
+$('#zoom-in').onclick=()=>zoom(1.2);$('#zoom-out').onclick=()=>zoom(1/1.2);$('#fit').onclick=()=>{if(!gesture)fit();};
+document.addEventListener('keydown',e=>{
+  if($('#modal').open||e.target.matches('input,select,textarea')||gesture)return;
+  if(e.key==='Escape'){clearPending();selected=null;updateSelection();}
+  if((e.key==='Delete'||e.key==='Backspace')&&selected){e.preventDefault();
+    if(selected.type==='node'||selected.type==='nodes'){const ids=new Set(selectedNodeIds());state.nodes=state.nodes.filter(n=>!ids.has(n.id));state.edges=state.edges.filter(edge=>!ids.has(edge.from)&&!ids.has(edge.to));}
+    else state.edges=state.edges.filter(edge=>edge.id!==selected.id);
+    selected=null;clearPending();renderNodes();save();
+  }
+});
+
 $('#clear').onclick=()=>{if(state.nodes.length&&confirm('Удалить все ноды и связи? Материалы и рецепты останутся.')){state.nodes=[];state.edges=[];selected=null;clearPending();renderNodes();save();}};
 function options(value,optional=false){return (optional?'<option value="">Не требуется</option>':'<option value="" disabled selected>Выберите материал</option>')+state.materials.map(m=>`<option value="${esc(m.id)}" ${m.id===value?'selected':''}>${esc(m.name)}</option>`).join('');}
 function uploadMarkup(){return `<div class="upload-area"><div id="icon-preview"></div><div><button type="button" id="pick-icon">↥ Загрузить иконку</button> <button type="button" id="paste-icon">Вставить</button></div><p>PNG, JPG, WebP, GIF · до 5 МБ<br>Также можно вставить изображение через Ctrl+V</p><input type="file" id="icon-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>`;}
