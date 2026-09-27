@@ -4,6 +4,32 @@ const { validate, demo, connectionError, deletionPlan, removeItem } = require('.
 test('JSON round trip preserves materials, icons and graph', () => {
   const data = demo(); assert.deepEqual(validate(JSON.parse(JSON.stringify(data))), data);
 });
+test('splitters with two and three outputs preserve individual output connections in JSON', () => {
+  for (const outputs of [2,3]) {
+    const data = demo(); data.edges = [];
+    data.nodes.push({id:'split',type:'splitter',material:'iron',outputs,x:200,y:200});
+    data.edges.push({id:'feed',from:'n1',to:'split',input:0});
+    for (let output=0;output<outputs;output++) {
+      data.nodes.push({id:'consumer'+output,recipe:'nails',x:500,y:output*200});
+      assert.equal(connectionError(data,'split','consumer'+output,0,output),'');
+      data.edges.push({id:'branch'+output,from:'split',to:'consumer'+output,input:0,output});
+    }
+    assert.deepEqual(validate(JSON.parse(JSON.stringify(data))),data);
+    assert.match(connectionError(data,'split','n4',0,outputs),/коннектор/);
+    assert.match(connectionError(data,'n2','split',0),/совпадать/);
+    assert.ok(!removeItem(data,'material','iron').nodes.some(n=>n.id==='split'));
+    assert.deepEqual(validate(removeItem(data,'material','iron')),removeItem(data,'material','iron'));
+  }
+});
+test('splitter cycles and invalid splitter data are rejected', () => {
+  const data=demo();data.edges=[];
+  data.nodes.push({id:'a',type:'splitter',material:'iron',outputs:2,x:0,y:0},{id:'b',type:'splitter',material:'iron',outputs:3,x:300,y:0});
+  data.edges.push({id:'ab',from:'a',to:'b',input:0,output:1});
+  assert.match(connectionError(data,'b','a',0,2),/цикл/);
+  for (const change of [d=>d.nodes.at(-1).outputs=4,d=>d.nodes.at(-1).material='missing',d=>d.edges[0].output=-1,d=>d.edges[0].output=2]) {
+    const copy=structuredClone(data);change(copy);assert.throws(()=>validate(copy));
+  }
+});
 test('deleting a recipe removes its instances and edges but keeps materials and other nodes', () => {
   const data = demo();
   data.nodes.push({ id: 'extra', recipe: 'smelt', x: 0, y: 0 });
