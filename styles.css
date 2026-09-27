@@ -5,3 +5,4 @@
 
 .sidebar .section-heading,.sidebar .search,.sidebar .section-hint{flex-shrink:0}
 .splitter-tools .utility-buttons{flex-wrap:wrap}.utility-buttons button{min-width:0;font-size:11px;overflow-wrap:anywhere}
+#canvas{user-select:none;-webkit-user-select:none}
