@@ -1,6 +1,39 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validate, demo, connectionError, deletionPlan, removeItem } = require('./core.js');
+const { nodePorts } = require('./core.js');
+test('producers have only output; terminators accept every material', () => {
+  const data=demo();data.edges=[];
+  const sink={id:'sink',type:'terminator',x:500,y:100};data.nodes.push(sink);
+  assert.deepEqual(nodePorts(data,sink),{inputs:[null],outputs:[]});
+  for(const m of data.materials){
+    const source={id:'source-'+m.id,type:'producer',material:m.id,x:0,y:0};data.nodes.push(source);
+    assert.deepEqual(nodePorts(data,source),{inputs:[],outputs:[m.id]});
+    assert.equal(connectionError(data,source.id,'sink',0),'');
+  }
+  assert.equal(connectionError(data,'source-ore','n1',0),'');
+  assert.match(connectionError(data,'source-wood','n1',0),/совпадать/);
+  assert.match(connectionError(data,'n1','source-iron',0),/входной/);
+  assert.match(connectionError(data,'sink','n1',0),/выходной/);
+  assert.match(connectionError(data,'source-iron','sink',1),/входной/);
+  data.edges.push({id:'supply',from:'source-ore',to:'sink',input:0});
+  assert.match(connectionError(data,'source-wood','sink',0),/занят/);
+  assert.deepEqual(validate(JSON.parse(JSON.stringify(data))),data);
+  const removed=removeItem(data,'material','ore');
+  assert.ok(!removed.nodes.some(n=>n.id==='source-ore'));
+  assert.ok(removed.nodes.some(n=>n.id==='sink'));
+  assert.equal(removed.edges.length,0);
+  assert.deepEqual(validate(removed),removed);
+});
+test('terminators accept recipes and all splitter outputs; invalid producer data is rejected', () => {
+  const data=demo();data.edges=[];
+  data.nodes.push({id:'sink',type:'terminator',x:0,y:0},{id:'split',type:'splitter',material:'iron',outputs:3,x:0,y:0});
+  assert.equal(connectionError(data,'n1','sink',0),'');
+  for(let output=0;output<3;output++)assert.equal(connectionError(data,'split','sink',0,output),'');
+  data.nodes.push({id:'bad',type:'producer',material:'missing',x:0,y:0});
+  assert.throws(()=>validate(data));
+  assert.deepEqual(validate({version:1,materials:[],recipes:[],nodes:[{id:'sink',type:'terminator',x:0,y:0}],edges:[]}).nodes,[{id:'sink',type:'terminator',x:0,y:0}]);
+});
 test('JSON round trip preserves materials, icons and graph', () => {
   const data = demo(); assert.deepEqual(validate(JSON.parse(JSON.stringify(data))), data);
 });

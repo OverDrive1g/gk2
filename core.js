@@ -5,6 +5,8 @@
     return { outputQuantity: recipe.outputQuantity ?? 1, inputQuantities: recipe.inputQuantities ?? recipe.inputs.map(() => 1) };
   }
   function nodePorts(state, node) {
+    if (node.type === 'producer') return { inputs: [], outputs: [node.material] };
+    if (node.type === 'terminator') return { inputs: [null], outputs: [] };
     if (node.type === 'splitter') return { inputs: [node.material], outputs: Array(node.outputs).fill(node.material) };
     const r = state.recipes.find(r => r.id === node.recipe);
     return { inputs: r.inputs, outputs: [r.output] };
@@ -14,7 +16,8 @@
     if (!a || !b || from === to) return 'Нельзя соединить ноду с самой собой.';
     const ar = nodePorts(state, a), br = nodePorts(state, b);
     if (!Number.isInteger(output) || output < 0 || output >= ar.outputs.length) return 'Некорректный выходной коннектор.';
-    if (!Number.isInteger(input) || ar.outputs[output] !== br.inputs[input]) return 'Материалы входа и выхода должны совпадать.';
+    if (!Number.isInteger(input) || input < 0 || input >= br.inputs.length) return 'Некорректный входной коннектор.';
+    if (br.inputs[input] !== null && ar.outputs[output] !== br.inputs[input]) return 'Материалы входа и выхода должны совпадать.';
     if (state.edges.some(e => e.to === to && e.input === input)) return 'Этот вход уже занят. Сначала удалите соединение.';
     const seen = new Set(), stack = [to];
     while (stack.length) { const id = stack.pop(); if (id === from) return 'Соединение создаёт цикл в дереве.'; if (seen.has(id)) continue; seen.add(id); state.edges.filter(e => e.from === id).forEach(e => stack.push(e.to)); }
@@ -37,10 +40,18 @@
     }
     for (const n of data.nodes) {
       if (n.type === 'splitter') { if (!materials.has(n.material) || ![2,3].includes(n.outputs)) fail(); }
+      else if (n.type === 'producer') { if (!materials.has(n.material)) fail(); }
+      else if (n.type === 'terminator') { /* Universal input, no material reference. */ }
       else if ((n.type !== undefined && n.type !== 'recipe') || !recipes.has(n.recipe)) fail();
       if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || Math.abs(n.x) > 1000000 || Math.abs(n.y) > 1000000) fail();
     }
-    const clean = { version: 1, materials: data.materials.map(({id,name,icon}) => ({id,name,icon})), recipes: data.recipes.map(r => ({id:r.id,output:r.output,inputs:[...r.inputs],...recipeQuantities(r)})), nodes: data.nodes.map(n => n.type === 'splitter' ? {id:n.id,type:'splitter',material:n.material,outputs:n.outputs,x:n.x,y:n.y} : {id:n.id,recipe:n.recipe,x:n.x,y:n.y}), edges: [] };
+    const clean = { version: 1, materials: data.materials.map(({id,name,icon}) => ({id,name,icon})), recipes: data.recipes.map(r => ({id:r.id,output:r.output,inputs:[...r.inputs],...recipeQuantities(r)})), nodes: data.nodes.map(n => {
+      const base = {id:n.id,x:n.x,y:n.y};
+      if (n.type === 'splitter') return {...base,type:n.type,material:n.material,outputs:n.outputs};
+      if (n.type === 'producer') return {...base,type:n.type,material:n.material};
+      if (n.type === 'terminator') return {...base,type:n.type};
+      return {...base,recipe:n.recipe};
+    }), edges: [] };
     for (const e of data.edges) { if (connectionError(clean, e.from, e.to, e.input, e.output)) fail(); clean.edges.push({id:e.id,from:e.from,to:e.to,input:e.input,...(e.output !== undefined ? {output:e.output} : {})}); }
     return clean;
   }
@@ -51,7 +62,7 @@
     const materials = state.materials.filter(m => kind === 'material' && m.id === id);
     const recipes = state.recipes.filter(r => kind === 'recipe' ? r.id === id : kind === 'material' && (r.output === id || r.inputs.includes(id)));
     const recipeIds = new Set(recipes.map(r => r.id));
-    const nodes = state.nodes.filter(n => recipeIds.has(n.recipe) || (kind === 'material' && n.type === 'splitter' && n.material === id));
+    const nodes = state.nodes.filter(n => recipeIds.has(n.recipe) || (kind === 'material' && ['splitter','producer'].includes(n.type) && n.material === id));
     const nodeIds = new Set(nodes.map(n => n.id));
     const edges = state.edges.filter(e => nodeIds.has(e.from) || nodeIds.has(e.to));
     return { materials, recipes, nodes, edges };

@@ -4,3 +4,4 @@
 .searchable-select{position:relative}.select-results{position:absolute;left:0;right:0;top:calc(100% + 4px);max-height:180px;overflow-y:auto;background:#202226;border:1px solid #55504a;border-radius:6px;box-shadow:0 8px 24px #0008;z-index:10}.select-option,.select-empty{padding:10px 12px;font-size:12px;overflow-wrap:anywhere}.select-option{cursor:pointer}.select-option:hover,.select-option.active{background:#403528;color:var(--accent)}.select-empty{color:var(--muted)}.field select[hidden]{display:none}
 
 .sidebar .section-heading,.sidebar .search,.sidebar .section-hint{flex-shrink:0}
+.splitter-tools .utility-buttons{flex-wrap:wrap}.utility-buttons button{min-width:0;font-size:11px;overflow-wrap:anywhere}
