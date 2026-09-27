@@ -62,7 +62,51 @@ deleteItemButton.className = 'danger';
 deleteItemButton.style.marginRight = 'auto';
 deleteItemButton.hidden = true;
 $('.modal-actions').prepend(deleteItemButton);
-function initModal(title){$('#modal-title').textContent=title;$('#form-error').textContent='';$('#modal-form button[type="submit"]').hidden=false;deleteItemButton.hidden=!editId||!['material','recipe'].includes(modalMode);deleteItemButton.textContent=modalMode==='material'?'Удалить материал':'Удалить рецепт';$('#modal').showModal();}
+function initModal(title){$('#modal-title').textContent=title;$('#form-error').textContent='';$('#modal-form button[type="submit"]').hidden=false;deleteItemButton.hidden=!editId||!['material','recipe'].includes(modalMode);deleteItemButton.textContent=modalMode==='material'?'Удалить материал':'Удалить рецепт';enhanceMaterialSelectors();$('#modal').showModal();}
+function enhanceMaterialSelectors() {
+  $('#modal-body').querySelectorAll('select').forEach(select => {
+    const required = select.required;
+    const choices = [...select.options].filter(option => !option.disabled).map(option => ({value:option.value, label:option.textContent}));
+    const wrapper = document.createElement('div'); wrapper.className = 'searchable-select';
+    const input = document.createElement('input');
+    input.type = 'text'; input.autocomplete = 'off'; input.placeholder = 'Поиск по части названия…';
+    input.setAttribute('role','combobox'); input.setAttribute('aria-autocomplete','list'); input.setAttribute('aria-expanded','false');
+    input.setAttribute('aria-label',select.closest('label').childNodes[0].textContent.trim());
+    const list = document.createElement('div'); list.className = 'select-results'; list.id = select.id+'-results'; list.setAttribute('role','listbox'); list.hidden = true;
+    input.setAttribute('aria-controls',list.id);
+    select.before(wrapper); wrapper.append(input,list); select.hidden=true; select.required=false;
+    let visible = [], active = -1;
+    function restore() {
+      input.value = choices.find(option => option.value === select.value)?.label || '';
+      input.setCustomValidity(required && !select.value ? 'Выберите материал из списка.' : '');
+    }
+    function close() { list.hidden=true; input.setAttribute('aria-expanded','false'); input.removeAttribute('aria-activedescendant'); restore(); }
+    function highlight() {
+      [...list.children].forEach((el,i) => {el.classList.toggle('active',i===active);el.setAttribute('aria-selected',String(i===active));});
+      if (active>=0) { input.setAttribute('aria-activedescendant',list.children[active].id); list.children[active].scrollIntoView({block:'nearest'}); }
+      else input.removeAttribute('aria-activedescendant');
+    }
+    function show(query='') {
+      visible=choices.filter(option=>!option.value || option.label.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru')));
+      active=-1; list.replaceChildren();
+      visible.forEach((option,i)=>{const row=document.createElement('div');row.id=list.id+'-'+i;row.setAttribute('role','option');row.className='select-option';row.textContent=option.label;row.addEventListener('pointerdown',e=>e.preventDefault());row.addEventListener('click',e=>{e.preventDefault();choose(i);});list.append(row);});
+      if(!visible.length){const empty=document.createElement('div');empty.className='select-empty';empty.textContent='Материалы не найдены';list.append(empty);}
+      list.hidden=false;input.setAttribute('aria-expanded','true');input.removeAttribute('aria-activedescendant');
+    }
+    function choose(index) { if(!visible[index])return;select.value=visible[index].value;select.dispatchEvent(new Event('change',{bubbles:true}));close(); }
+    input.addEventListener('focus',()=>{show();input.select();});
+    input.addEventListener('click',()=>{if(list.hidden)show();});
+    input.addEventListener('input',()=>{input.setCustomValidity('Выберите материал из списка.');show(input.value);});
+    input.addEventListener('blur',close);
+    input.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&!list.hidden){e.preventDefault();e.stopPropagation();close();}
+      else if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(list.hidden)show();if(visible.length){active=(active+(e.key==='ArrowDown'?1:-1)+visible.length)%visible.length;highlight();}}
+      else if(e.key==='Enter'&&!list.hidden){e.preventDefault();if(active>=0)choose(active);else if(visible.length===1)choose(0);}
+      else if(e.key==='Tab')close();
+    });
+    restore();
+  });
+}
 deleteItemButton.onclick = () => {
   if (!editId || !['material', 'recipe'].includes(modalMode)) return;
   const plan = CraftCore.deletionPlan(state, modalMode, editId);
@@ -121,3 +165,16 @@ function openSplitter(outputs,position=null) {
 splitterTools.addEventListener('click',e=>{const button=e.target.closest('[data-splitter]');if(button)openSplitter(+button.dataset.splitter);});
 splitterTools.addEventListener('dragstart',e=>{const button=e.target.closest('[data-splitter]');if(button){e.dataTransfer.setData('application/x-workshop-splitter',button.dataset.splitter);e.dataTransfer.effectAllowed='copy';}});
 canvas.addEventListener('drop',e=>{const outputs=+e.dataTransfer.getData('application/x-workshop-splitter');if([2,3].includes(outputs)){const p=worldPoint(e.clientX,e.clientY);openSplitter(outputs,{x:p.x-118,y:p.y-35});}});
+
+let addShortcutUntil = 0;
+document.addEventListener('keydown', e => {
+  if (e.repeat || e.isComposing) return;
+  if ($('#modal').open || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.target.closest('input,textarea,select,[contenteditable="true"],[role="combobox"]')) { addShortcutUntil=0; return; }
+  const now=performance.now();
+  if (e.code==='KeyA') {addShortcutUntil=now+1500;return;}
+  const armed=now<=addShortcutUntil;addShortcutUntil=0;
+  if(armed && (e.code==='KeyM'||e.code==='KeyR')) {e.preventDefault();clearPending();if(e.code==='KeyM')openMaterial();else openRecipe();}
+});
+window.addEventListener('blur',()=>{addShortcutUntil=0;});
+$('#add-material').title='Добавить материал (A → M)';
+$('#add-recipe').title='Добавить рецепт (A → R)';
