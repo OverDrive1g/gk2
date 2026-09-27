@@ -29,6 +29,24 @@
   function demo() {
     return {version:1,materials:[{id:'ore',name:'Железная руда',icon:'🪨'},{id:'coal',name:'Уголь',icon:'◈'},{id:'wood',name:'Древесина',icon:'🪵'},{id:'iron',name:'Железный слиток',icon:'▰'},{id:'plank',name:'Доски',icon:'🪵'},{id:'handle',name:'Рукоять',icon:'🦴'},{id:'pick',name:'Железная кирка',icon:'⛏️'},{id:'nail',name:'Гвозди',icon:'🔩'},{id:'chest',name:'Сундук',icon:'🧰'}],recipes:[{id:'smelt',output:'iron',inputs:['ore','coal']},{id:'saw',output:'plank',inputs:['wood']},{id:'grip',output:'handle',inputs:['plank']},{id:'forge',output:'pick',inputs:['iron','handle']},{id:'nails',output:'nail',inputs:['iron']},{id:'box',output:'chest',inputs:['plank','nail']}],nodes:[{id:'n1',recipe:'smelt',x:60,y:80},{id:'n2',recipe:'saw',x:60,y:355},{id:'n3',recipe:'grip',x:385,y:355},{id:'n4',recipe:'forge',x:710,y:135}],edges:[{id:'e1',from:'n1',to:'n4',input:0},{id:'e2',from:'n2',to:'n3',input:0},{id:'e3',from:'n3',to:'n4',input:1}]};
   }
-  const api = { connectionError, validate, demo };
+  function deletionPlan(state, kind, id) {
+    const materials = state.materials.filter(m => kind === 'material' && m.id === id);
+    const recipes = state.recipes.filter(r => kind === 'recipe' ? r.id === id : kind === 'material' && (r.output === id || r.inputs.includes(id)));
+    const recipeIds = new Set(recipes.map(r => r.id));
+    const nodes = state.nodes.filter(n => recipeIds.has(n.recipe));
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const edges = state.edges.filter(e => nodeIds.has(e.from) || nodeIds.has(e.to));
+    return { materials, recipes, nodes, edges };
+  }
+  function removeItem(state, kind, id) {
+    const plan = deletionPlan(state, kind, id);
+    const next = { ...state };
+    for (const key of ['materials', 'recipes', 'nodes', 'edges']) {
+      const ids = new Set(plan[key].map(item => item.id));
+      next[key] = state[key].filter(item => !ids.has(item.id));
+    }
+    return next;
+  }
+  const api = { connectionError, validate, demo, deletionPlan, removeItem };
   if (typeof module !== 'undefined') module.exports = api; else root.CraftCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

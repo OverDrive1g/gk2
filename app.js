@@ -51,7 +51,29 @@ document.addEventListener('keydown',e=>{if($('#modal').open||e.target.matches('i
 $('#clear').onclick=()=>{if(state.nodes.length&&confirm('Удалить все ноды и связи? Материалы и рецепты останутся.')){state.nodes=[];state.edges=[];selected=null;clearPending();renderNodes();save();}};
 function options(value,optional=false){return (optional?'<option value="">Не требуется</option>':'<option value="" disabled selected>Выберите материал</option>')+state.materials.map(m=>`<option value="${esc(m.id)}" ${m.id===value?'selected':''}>${esc(m.name)}</option>`).join('');}
 function uploadMarkup(){return `<div class="upload-area"><div id="icon-preview"></div><div><button type="button" id="pick-icon">↥ Загрузить иконку</button> <button type="button" id="paste-icon">Вставить</button></div><p>PNG, JPG, WebP, GIF · до 5 МБ<br>Также можно вставить изображение через Ctrl+V</p><input type="file" id="icon-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>`;}
-function initModal(title){$('#modal-title').textContent=title;$('#form-error').textContent='';$('#modal-form button[type="submit"]').hidden=false;$('#modal').showModal();}
+const deleteItemButton = document.createElement('button');
+deleteItemButton.type = 'button';
+deleteItemButton.className = 'danger';
+deleteItemButton.style.marginRight = 'auto';
+deleteItemButton.hidden = true;
+$('.modal-actions').prepend(deleteItemButton);
+function initModal(title){$('#modal-title').textContent=title;$('#form-error').textContent='';$('#modal-form button[type="submit"]').hidden=false;deleteItemButton.hidden=!editId||!['material','recipe'].includes(modalMode);deleteItemButton.textContent=modalMode==='material'?'Удалить материал':'Удалить рецепт';$('#modal').showModal();}
+deleteItemButton.onclick = () => {
+  if (!editId || !['material', 'recipe'].includes(modalMode)) return;
+  const plan = CraftCore.deletionPlan(state, modalMode, editId);
+  const name = modalMode === 'material' ? material(editId).name : material(recipe(editId).output).name;
+  const details = [];
+  if (modalMode === 'material' && plan.recipes.length) details.push('Рецепты с этим материалом: ' + plan.recipes.map(r => material(r.output).name).join(', ') + '.');
+  if (plan.nodes.length) details.push(`Ноды этих рецептов: ${plan.nodes.length}. Соединения: ${plan.edges.length}.`);
+  if (!confirm(`Удалить ${modalMode === 'material' ? 'материал' : 'рецепт'} «${name}»?${details.length ? '\n\nТакже будут удалены:\n' + details.join('\n') : ''}`)) return;
+  state = CraftCore.removeItem(state, modalMode, editId);
+  selected = null;
+  clearPending();
+  $('#modal').close();
+  render();
+  save();
+  toast(modalMode === 'material' ? 'Материал удалён.' : 'Рецепт удалён.');
+};
 function openMaterial(id=null){modalMode='material';editId=id;const m=id?material(id):null;draftIcon=m?.icon||'◇';$('#modal-body').innerHTML=`<label class="field">Название материала<input id="material-name" maxlength="100" required placeholder="Например, медная руда" value="${esc(m?.name||'')}"></label>${uploadMarkup()}<p class="form-note">Материал появится в списке и станет доступен для рецептов.</p>`;initModal(id?'Изменить материал':'Новый материал');bindUpload();$('#material-name').focus();}
 function openRecipe(id=null){if(!state.materials.length){toast('Сначала добавьте материалы.');openMaterial();return;}modalMode='recipe';editId=id;const r=id?recipe(id):null;draftIcon='';$('#modal-body').innerHTML=`<label class="field">Результат крафта<select id="output-material" required>${options(r?.output)}</select></label><label class="field">Входящий материал 1<select id="input-one" required>${options(r?.inputs[0])}</select></label><label class="field">Входящий материал 2 <span class="form-note">· необязательно</span><select id="input-two">${options(r?.inputs[1],true)}</select></label>${uploadMarkup()}<p class="form-note">Иконка относится к материалу результата и обновится во всём каталоге.</p>`;initModal(id?'Изменить рецепт':'Новый рецепт');bindUpload();$('#output-material').onchange=()=>{draftIcon='';updatePreview();};}
 function updatePreview(){const m=modalMode==='recipe'?material($('#output-material').value):null;$('#icon-preview').innerHTML=icon({icon:draftIcon||m?.icon||'◇'});}
