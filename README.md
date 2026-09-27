@@ -1,5 +1,15 @@
 # Подземная мастерская
 
+## GitHub Pages
+
+Адрес после публикации: https://overdrive1g.github.io/gk2/
+
+Один раз в настройках репозитория откройте **Settings → Pages → Build and deployment → Source → GitHub Actions**. После этого push в `main` запускает workflow **Deploy GitHub Pages**. Его также можно запустить вручную: **Actions → Deploy GitHub Pages → Run workflow**.
+
+Перед публикацией выполняются проверка синтаксиса и тесты. На сайт попадают только `index.html`, `styles.css`, `app.js`, `core.js` и `.nojekyll`. Node.js используется для проверок; сама страница работает в браузере без сервера. Настройка соответствует [документации GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+Сохранения привязаны к адресу браузера: чтобы перенести дерево с локальной страницы на GitHub Pages, экспортируйте JSON локально и импортируйте его на сайте.
+
 Редактор дерева крафтов без зависимостей. Откройте `index.html` в современном браузере либо запустите на Node.js 24:
 
 ```sh
