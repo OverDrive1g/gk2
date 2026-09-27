@@ -27,13 +27,14 @@ jobs:
         uses: actions/checkout@v6
       - name: Check JavaScript and run tests
         run: |
+          node build-default.cjs
           node --check app.js
           node --check core.js
           node --test core.test.js
       - name: Prepare static site
         run: |
           mkdir -p _site
-          cp index.html styles.css app.js core.js _site/
+          cp index.html styles.css app.js core.js default-workshop.js _site/
           touch _site/.nojekyll
       - name: Configure Pages
         uses: actions/configure-pages@v5

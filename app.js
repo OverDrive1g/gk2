@@ -3,8 +3,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
 const storageKey = 'underground-workshop-v1';
-let state = CraftCore.demo(), selected = null, pending = null, gesture = null, view = {x:0,y:0,scale:1}, modalMode = '', editId = null, draftIcon = '', toastTimer;
-try { const saved = localStorage.getItem(storageKey); if (saved) state = CraftCore.validate(JSON.parse(saved)); } catch { setTimeout(() => toast('Сохранение не удалось прочитать. Загружен пример дерева.'), 300); }
+let state = CraftCore.validate(globalThis.DEFAULT_WORKSHOP), selected = null, pending = null, gesture = null, view = {x:0,y:0,scale:1}, modalMode = '', editId = null, draftIcon = '', toastTimer;
+try { const saved = localStorage.getItem(storageKey); if (saved) state = CraftCore.validate(JSON.parse(saved)); } catch { setTimeout(() => toast('Сохранение не удалось прочитать. Загружено стартовое дерево.'), 300); }
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 4000); }
 function save() { try { localStorage.setItem(storageKey, JSON.stringify(state)); $('#save-status').textContent = '● Сохранено локально'; } catch { $('#save-status').textContent = '● Не сохранено'; toast('Хранилище браузера недоступно или заполнено. Экспортируйте JSON.'); } }
 const material = id => state.materials.find(m => m.id === id);

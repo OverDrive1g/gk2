@@ -2,6 +2,13 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validate, demo, connectionError, deletionPlan, removeItem } = require('./core.js');
 const { nodePorts } = require('./core.js');
+test('bundled default tree matches the validated user JSON', () => {
+  const fs=require('node:fs'), path=require('node:path'), vm=require('node:vm');
+  const source=validate(JSON.parse(fs.readFileSync(path.join(__dirname,'workshop-2026-09-27.json'),'utf8').replace(/^\uFEFF/,'')));
+  const context=vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'default-workshop.js'),'utf8'),context);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.DEFAULT_WORKSHOP)),source);
+});
 test('moving a group preserves offsets, unselected nodes and connections', () => {
   const {moveNodes}=require('./core.js');
   const data=demo(), original=structuredClone(data);
