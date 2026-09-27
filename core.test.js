@@ -4,6 +4,35 @@ const { validate, demo, connectionError, deletionPlan, removeItem } = require('.
 test('JSON round trip preserves materials, icons and graph', () => {
   const data = demo(); assert.deepEqual(validate(JSON.parse(JSON.stringify(data))), data);
 });
+test('recipe quantities survive JSON export and import', () => {
+  const data = demo();
+  data.recipes[0].outputQuantity = 3;
+  data.recipes[0].inputQuantities = [5, 2];
+  assert.deepEqual(validate(JSON.parse(JSON.stringify(data))), data);
+  data.edges = [];
+  assert.equal(connectionError(data, 'n1', 'n4', 0), '');
+});
+test('legacy recipes default to one unit for every material', () => {
+  const data = demo();
+  for (const r of data.recipes) { delete r.outputQuantity; delete r.inputQuantities; }
+  const migrated = validate(data);
+  for (const r of migrated.recipes) {
+    assert.equal(r.outputQuantity, 1);
+    assert.deepEqual(r.inputQuantities, r.inputs.map(() => 1));
+  }
+});
+test('invalid quantities and input quantity counts are rejected', () => {
+  for (const value of [0, -1, 1.5, '2', null, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    const data = demo(); data.recipes[0].outputQuantity = value;
+    assert.throws(() => validate(data));
+    data.recipes[0].outputQuantity = 1; data.recipes[0].inputQuantities[0] = value;
+    assert.throws(() => validate(data));
+  }
+  for (const value of [[], [1], [1,2,3], null, '1,2']) {
+    const data = demo(); data.recipes[0].inputQuantities = value;
+    assert.throws(() => validate(data));
+  }
+});
 test('splitters with two and three outputs preserve individual output connections in JSON', () => {
   for (const outputs of [2,3]) {
     const data = demo(); data.edges = [];

@@ -1,5 +1,9 @@
 (function (root) {
   'use strict';
+  const validQuantity = value => Number.isSafeInteger(value) && value > 0;
+  function recipeQuantities(recipe) {
+    return { outputQuantity: recipe.outputQuantity ?? 1, inputQuantities: recipe.inputQuantities ?? recipe.inputs.map(() => 1) };
+  }
   function nodePorts(state, node) {
     if (node.type === 'splitter') return { inputs: [node.material], outputs: Array(node.outputs).fill(node.material) };
     const r = state.recipes.find(r => r.id === node.recipe);
@@ -27,12 +31,16 @@
     for (const m of data.materials) if (typeof m.name !== 'string' || !m.name.trim() || m.name.length > 100 || typeof m.icon !== 'string' || m.icon.length > 2000000 || !(m.icon.length <= 16 || /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(m.icon))) fail();
     const materials = new Set(data.materials.map(m => m.id)), recipes = new Set(data.recipes.map(r => r.id));
     for (const r of data.recipes) if (!materials.has(r.output) || !Array.isArray(r.inputs) || r.inputs.length < 1 || r.inputs.length > 2 || r.inputs.some(i => !materials.has(i)) || new Set(r.inputs).size !== r.inputs.length || r.inputs.includes(r.output)) fail();
+    for (const r of data.recipes) {
+      if (r.outputQuantity !== undefined && !validQuantity(r.outputQuantity)) fail();
+      if (r.inputQuantities !== undefined && (!Array.isArray(r.inputQuantities) || r.inputQuantities.length !== r.inputs.length || !r.inputQuantities.every(validQuantity))) fail();
+    }
     for (const n of data.nodes) {
       if (n.type === 'splitter') { if (!materials.has(n.material) || ![2,3].includes(n.outputs)) fail(); }
       else if ((n.type !== undefined && n.type !== 'recipe') || !recipes.has(n.recipe)) fail();
       if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || Math.abs(n.x) > 1000000 || Math.abs(n.y) > 1000000) fail();
     }
-    const clean = { version: 1, materials: data.materials.map(({id,name,icon}) => ({id,name,icon})), recipes: data.recipes.map(({id,output,inputs}) => ({id,output,inputs:[...inputs]})), nodes: data.nodes.map(n => n.type === 'splitter' ? {id:n.id,type:'splitter',material:n.material,outputs:n.outputs,x:n.x,y:n.y} : {id:n.id,recipe:n.recipe,x:n.x,y:n.y}), edges: [] };
+    const clean = { version: 1, materials: data.materials.map(({id,name,icon}) => ({id,name,icon})), recipes: data.recipes.map(r => ({id:r.id,output:r.output,inputs:[...r.inputs],...recipeQuantities(r)})), nodes: data.nodes.map(n => n.type === 'splitter' ? {id:n.id,type:'splitter',material:n.material,outputs:n.outputs,x:n.x,y:n.y} : {id:n.id,recipe:n.recipe,x:n.x,y:n.y}), edges: [] };
     for (const e of data.edges) { if (connectionError(clean, e.from, e.to, e.input, e.output)) fail(); clean.edges.push({id:e.id,from:e.from,to:e.to,input:e.input,...(e.output !== undefined ? {output:e.output} : {})}); }
     return clean;
   }
@@ -57,6 +65,6 @@
     }
     return next;
   }
-  const api = { connectionError, validate, demo, deletionPlan, removeItem, nodePorts };
+  const api = { connectionError, validate, demo: () => validate(demo()), deletionPlan, removeItem, nodePorts, recipeQuantities, validQuantity };
   if (typeof module !== 'undefined') module.exports = api; else root.CraftCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
