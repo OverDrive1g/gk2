@@ -2,6 +2,20 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { validate, demo, connectionError, deletionPlan, removeItem } = require('./core.js');
 const { nodePorts } = require('./core.js');
+test('reversed inputs survive JSON without changing recipes or edge endpoints', () => {
+  const data=demo();
+  const original=structuredClone(data);
+  data.nodes.find(n=>n.id==='n4').inputsReversed=true;
+  const restored=validate(JSON.parse(JSON.stringify(data)));
+  assert.equal(restored.nodes.find(n=>n.id==='n4').inputsReversed,true);
+  assert.deepEqual(restored.recipes,original.recipes);
+  assert.deepEqual(restored.edges,original.edges);
+  assert.deepEqual(nodePorts(restored,restored.nodes.find(n=>n.id==='n4')), {inputs:['iron','handle'],outputs:['pick']});
+  restored.nodes.find(n=>n.id==='n4').inputsReversed=false;
+  assert.equal(validate(restored).nodes.find(n=>n.id==='n4').inputsReversed,false);
+  restored.nodes[0].inputsReversed='yes';
+  assert.throws(()=>validate(restored));
+});
 test('producers have only output; terminators accept every material', () => {
   const data=demo();data.edges=[];
   const sink={id:'sink',type:'terminator',x:500,y:100};data.nodes.push(sink);

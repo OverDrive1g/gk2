@@ -39,6 +39,7 @@
       if (r.inputQuantities !== undefined && (!Array.isArray(r.inputQuantities) || r.inputQuantities.length !== r.inputs.length || !r.inputQuantities.every(validQuantity))) fail();
     }
     for (const n of data.nodes) {
+      if (n.inputsReversed !== undefined && typeof n.inputsReversed !== 'boolean') fail();
       if (n.type === 'splitter') { if (!materials.has(n.material) || ![2,3].includes(n.outputs)) fail(); }
       else if (n.type === 'producer') { if (!materials.has(n.material)) fail(); }
       else if (n.type === 'terminator') { /* Universal input, no material reference. */ }
@@ -50,7 +51,7 @@
       if (n.type === 'splitter') return {...base,type:n.type,material:n.material,outputs:n.outputs};
       if (n.type === 'producer') return {...base,type:n.type,material:n.material};
       if (n.type === 'terminator') return {...base,type:n.type};
-      return {...base,recipe:n.recipe};
+      return {...base,recipe:n.recipe,...(n.inputsReversed !== undefined ? {inputsReversed:n.inputsReversed} : {})};
     }), edges: [] };
     for (const e of data.edges) { if (connectionError(clean, e.from, e.to, e.input, e.output)) fail(); clean.edges.push({id:e.id,from:e.from,to:e.to,input:e.input,...(e.output !== undefined ? {output:e.output} : {})}); }
     return clean;

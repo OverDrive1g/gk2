@@ -22,7 +22,10 @@ function renderNodes() {
     const m = terminator ? {name:'Любой материал',icon:'◎'} : material(ports.outputs[0]);
     const quantities = splitter || producer || terminator ? null : CraftCore.recipeQuantities(recipe(n.recipe));
     function rows(ids,kind) {
-      return ids.map((id,i) => {
+      const indices = ids.map((_,i) => i);
+      if(kind==='in' && n.inputsReversed)indices.reverse();
+      return indices.map(i => {
+        const id=ids[i];
         const item = id === null ? {name:'Любой материал',icon:'◎'} : material(id);
         const label = (kind==='out'?'Выход':'Вход')+' '+(i+1)+': '+item.name;
         const suffix = quantities ? ' <span class="quantity">×'+(kind==='out'?quantities.outputQuantity:quantities.inputQuantities[i])+'</span>' : splitter && kind==='out' ? ' · '+(i+1) : '';
@@ -31,7 +34,8 @@ function renderNodes() {
     }
     const title = splitter ? 'Сплиттер 1 → '+n.outputs : producer ? 'Продьюсер' : terminator ? 'Терминатор' : m.name;
     const subtitle = splitter ? 'РАЗВЕТВЛЕНИЕ МАТЕРИАЛА' : producer ? 'ИСТОЧНИК МАТЕРИАЛА' : terminator ? 'УНИВЕРСАЛЬНЫЙ ПРИЁМНИК' : 'РЕЦЕПТ КРАФТА';
-    return '<article class="node'+(selected?.id===n.id?' selected':'')+'" data-node="'+esc(n.id)+'" style="left:'+n.x+'px;top:'+n.y+'px"><div class="node-header">'+icon(m)+'<div><div class="node-title">'+esc(title)+'</div><div class="node-subtitle">'+subtitle+'</div></div></div><div class="node-body">'+rows(ports.inputs,'in')+rows(ports.outputs,'out')+'</div></article>';
+    const swap = ports.inputs.length > 1 ? '<button type="button" class="swap-inputs" data-swap-inputs="'+esc(n.id)+'" title="Поменять входы местами" aria-label="Поменять входы местами">⇅</button>' : '';
+    return '<article class="node'+(selected?.id===n.id?' selected':'')+'" data-node="'+esc(n.id)+'" style="left:'+n.x+'px;top:'+n.y+'px"><div class="node-header">'+icon(m)+'<div><div class="node-title">'+esc(title)+'</div><div class="node-subtitle">'+subtitle+'</div></div>'+swap+'</div><div class="node-body">'+rows(ports.inputs,'in')+rows(ports.outputs,'out')+'</div></article>';
   }).join('');
   $('#graph-count').textContent = `${state.nodes.length} нод · ${state.edges.length} связей`; $('#empty').hidden = state.nodes.length > 0;
   drawWires();
@@ -51,12 +55,20 @@ $('#recipes').addEventListener('keydown',e=>{if(e.key==='Enter' && e.target.matc
 $('#recipes').addEventListener('click',e=>{const edit=e.target.closest('[data-edit-recipe]');if(edit)openRecipe(edit.dataset.editRecipe);});
 $('#materials').addEventListener('click',e=>{const row=e.target.closest('[data-material]');if(row)openMaterial(row.dataset.material);});
 const canvas=$('#canvas');
+canvas.addEventListener('click',e=>{
+  const button=e.target.closest('[data-swap-inputs]');
+  if(!button)return;
+  const node=state.nodes.find(n=>n.id===button.dataset.swapInputs);
+  if(!node || CraftCore.nodePorts(state,node).inputs.length<2)return;
+  node.inputsReversed=!node.inputsReversed;
+  selected={type:'node',id:node.id};clearPending();renderNodes();save();
+});
 canvas.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';canvas.classList.add('dragover');});
 canvas.addEventListener('dragleave',()=>canvas.classList.remove('dragover'));
 canvas.addEventListener('drop',e=>{e.preventDefault();canvas.classList.remove('dragover');const p=worldPoint(e.clientX,e.clientY);addNode(e.dataTransfer.getData('text/plain'),{x:p.x-118,y:p.y-35});});
 function clearPending(){pending=null;document.querySelectorAll('.port.pending').forEach(p=>p.classList.remove('pending'));drawWires();}
 function connectPort(port){const target={node:port.dataset.node,kind:port.dataset.kind,input:+port.dataset.input};if(!pending){pending=target;port.classList.add('pending');toast('Выберите совместимый коннектор: тот же материал или вход терминатора.');return;}if(pending.node===target.node&&pending.kind===target.kind){clearPending();return;}if(pending.kind===target.kind){toast('Соедините выход с входом.');return;}const from=pending.kind==='out'?pending:target,to=pending.kind==='in'?pending:target;const error=CraftCore.connectionError(state,from.node,to.node,to.input,from.input);if(error){toast(error);return;}state.edges.push({id:uid(),from:from.node,to:to.node,input:to.input,output:from.input});clearPending();renderNodes();save();}
-canvas.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('.zoom-controls'))return;canvas.focus();const port=e.target.closest('.port');if(port){e.preventDefault();connectPort(port);return;}const edge=e.target.closest('[data-edge]');if(edge){selected={type:'edge',id:edge.dataset.edge};renderNodes();return;}const node=e.target.closest('.node');selected=node?{type:'node',id:node.dataset.node}:null;document.querySelectorAll('.node').forEach(n=>n.classList.toggle('selected',n.dataset.node===selected?.id));drawWires();if(node&&!e.target.closest('.node-header'))return;const n=node?state.nodes.find(n=>n.id===node.dataset.node):null;gesture={type:n?'node':'pan',node:n,startX:e.clientX,startY:e.clientY,x:n?n.x:view.x,y:n?n.y:view.y};canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('.zoom-controls, [data-swap-inputs]'))return;canvas.focus();const port=e.target.closest('.port');if(port){e.preventDefault();connectPort(port);return;}const edge=e.target.closest('[data-edge]');if(edge){selected={type:'edge',id:edge.dataset.edge};renderNodes();return;}const node=e.target.closest('.node');selected=node?{type:'node',id:node.dataset.node}:null;document.querySelectorAll('.node').forEach(n=>n.classList.toggle('selected',n.dataset.node===selected?.id));drawWires();if(node&&!e.target.closest('.node-header'))return;const n=node?state.nodes.find(n=>n.id===node.dataset.node):null;gesture={type:n?'node':'pan',node:n,startX:e.clientX,startY:e.clientY,x:n?n.x:view.x,y:n?n.y:view.y};canvas.setPointerCapture(e.pointerId);});
 canvas.addEventListener('pointermove',e=>{if(gesture){const dx=e.clientX-gesture.startX,dy=e.clientY-gesture.startY;if(gesture.type==='node'){gesture.node.x=gesture.x+dx/view.scale;gesture.node.y=gesture.y+dy/view.scale;const el=[...document.querySelectorAll('.node')].find(n=>n.dataset.node===gesture.node.id);el.style.left=gesture.node.x+'px';el.style.top=gesture.node.y+'px';drawWires();}else{view.x=gesture.x+dx;view.y=gesture.y+dy;applyView();}}else if(pending)drawWires(worldPoint(e.clientX,e.clientY));});
 function endGesture(){if(gesture?.type==='node')save();gesture=null;}
 canvas.addEventListener('pointerup',endGesture);canvas.addEventListener('pointercancel',endGesture);
